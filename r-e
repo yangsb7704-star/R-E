@@ -1,0 +1,731 @@
+# -*- coding: utf-8 -*-
+"""
+모빌리티 구동계 초기 설정 시스템 - 수정본
+- 실행 버튼이 보이지 않던 문제를 해결하기 위해 상단 고정 버튼 영역을 추가했습니다.
+- Tkinter 표준 라이브러리만 사용합니다.
+- 계산 결과를 테스트베드용 JSON으로 클립보드에 복사할 수 있습니다.
+"""
+
+import json
+import math
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+
+APP_TITLE = "모빌리티 구동계 초기 설정 시스템"
+
+
+PRESETS = {
+    "직접 입력": {},
+    "전동 킥보드": {
+        "scale": "개인 이동수단",
+        "purpose": "전동 킥보드형 1인 모빌리티",
+        "mass": 85,
+        "speed": 25,
+        "speed_unit": "km/h",
+        "wheels": 2,
+        "wheel_diameter": 0.20,
+        "grade": 8,
+        "environment": "도심/포장도로",
+        "extra": "가벼운 차체, 안정적인 제동, 배터리 효율 중요"
+    },
+    "청소 로봇": {
+        "scale": "소형 로봇",
+        "purpose": "실내 청소 및 순찰 로봇",
+        "mass": 18,
+        "speed": 0.8,
+        "speed_unit": "m/s",
+        "wheels": 2,
+        "wheel_diameter": 0.12,
+        "grade": 5,
+        "environment": "실내/평탄면",
+        "extra": "저소음, 저속 정밀 제어, 긴 운용시간 필요"
+    },
+    "카고 물류로봇": {
+        "scale": "중형 로봇",
+        "purpose": "실내외 물류 운반 로봇",
+        "mass": 120,
+        "speed": 1.5,
+        "speed_unit": "m/s",
+        "wheels": 4,
+        "wheel_diameter": 0.25,
+        "grade": 10,
+        "environment": "실내외 혼합",
+        "extra": "적재하중, 등판능력, 안정적인 저속 토크 중요"
+    },
+    "초소형 EV": {
+        "scale": "소형 전기차",
+        "purpose": "초소형 전기 모빌리티",
+        "mass": 350,
+        "speed": 45,
+        "speed_unit": "km/h",
+        "wheels": 2,
+        "wheel_diameter": 0.45,
+        "grade": 12,
+        "environment": "도심/포장도로",
+        "extra": "고속 주행, 제동 안정성, 배터리 용량 중요"
+    },
+    "산악 구조 로봇": {
+        "scale": "험지 로봇",
+        "purpose": "산악/재난 구조용 이동 로봇",
+        "mass": 65,
+        "speed": 1.2,
+        "speed_unit": "m/s",
+        "wheels": 4,
+        "wheel_diameter": 0.30,
+        "grade": 25,
+        "environment": "험지/비포장",
+        "extra": "높은 접지력, 방수/방진, 큰 토크 여유 필요"
+    },
+    "농업 방제 로봇": {
+        "scale": "농업 로봇",
+        "purpose": "농업 방제 및 운반 로봇",
+        "mass": 180,
+        "speed": 1.0,
+        "speed_unit": "m/s",
+        "wheels": 4,
+        "wheel_diameter": 0.35,
+        "grade": 15,
+        "environment": "농지/비포장",
+        "extra": "진흙, 요철, 적재하중, 저속 고토크 필요"
+    },
+    "FRC/대회용 로봇": {
+        "scale": "대회용 로봇",
+        "purpose": "FRC/대회용 공 수집 및 발사 로봇",
+        "mass": 55,
+        "speed": 2.0,
+        "speed_unit": "m/s",
+        "wheels": 4,
+        "wheel_diameter": 0.15,
+        "grade": 10,
+        "environment": "실내/경기장",
+        "extra": "빠른 가속, 방향전환, 충격 대응, 기어비 최적화 필요"
+    }
+}
+
+
+ENV_PARAMS = {
+    "실내/평탄면": {"crr": 0.012, "mu": 0.75, "eff": 0.88},
+    "실내/경기장": {"crr": 0.018, "mu": 0.85, "eff": 0.86},
+    "도심/포장도로": {"crr": 0.018, "mu": 0.80, "eff": 0.85},
+    "실내외 혼합": {"crr": 0.030, "mu": 0.70, "eff": 0.82},
+    "농지/비포장": {"crr": 0.060, "mu": 0.55, "eff": 0.78},
+    "험지/비포장": {"crr": 0.080, "mu": 0.50, "eff": 0.75},
+}
+
+
+class MobilityInitialSettingApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title(APP_TITLE)
+        self.geometry("1280x820")
+        self.minsize(1100, 720)
+
+        self.last_design_data = None
+
+        self._configure_style()
+        self._build_layout()
+        self.apply_preset("FRC/대회용 로봇")
+
+    def _configure_style(self):
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure("Title.TLabel", font=("맑은 고딕", 18, "bold"))
+        style.configure("Section.TLabel", font=("맑은 고딕", 11, "bold"))
+        style.configure("Primary.TButton", font=("맑은 고딕", 11, "bold"), padding=8)
+        style.configure("Secondary.TButton", font=("맑은 고딕", 10), padding=6)
+        style.configure("TLabel", font=("맑은 고딕", 10))
+        style.configure("TEntry", font=("맑은 고딕", 10))
+        style.configure("TCombobox", font=("맑은 고딕", 10))
+
+    def _build_layout(self):
+        # 상단 고정 영역: 제목과 핵심 버튼을 항상 보이게 배치
+        header = ttk.Frame(self, padding=(14, 10, 14, 8))
+        header.pack(side=tk.TOP, fill=tk.X)
+
+        title_area = ttk.Frame(header)
+        title_area.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(title_area, text=APP_TITLE, style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            title_area,
+            text="왼쪽 조건 입력 → 상단 [설계 데이터 및 스케치 생성하기] 버튼 클릭 → 테스트베드용 JSON 복사",
+            foreground="#555"
+        ).pack(anchor="w", pady=(4, 0))
+
+        button_area = ttk.Frame(header)
+        button_area.pack(side=tk.RIGHT)
+        ttk.Button(
+            button_area,
+            text="⚙ 설계 데이터 및 스케치 생성하기",
+            style="Primary.TButton",
+            command=self.generate_design
+        ).pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        ttk.Button(
+            button_area,
+            text="📋 테스트베드용 설계 데이터 복사",
+            style="Secondary.TButton",
+            command=self.copy_testbed_json
+        ).pack(side=tk.TOP, fill=tk.X)
+
+        sep = ttk.Separator(self, orient=tk.HORIZONTAL)
+        sep.pack(side=tk.TOP, fill=tk.X)
+
+        main = ttk.Frame(self, padding=12)
+        main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # 좌측 입력 패널
+        left = ttk.Frame(main, width=360)
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        left.pack_propagate(False)
+
+        # 입력 패널 스크롤 처리
+        input_canvas = tk.Canvas(left, highlightthickness=0)
+        input_scroll = ttk.Scrollbar(left, orient="vertical", command=input_canvas.yview)
+        self.input_frame = ttk.Frame(input_canvas)
+        self.input_frame.bind(
+            "<Configure>",
+            lambda e: input_canvas.configure(scrollregion=input_canvas.bbox("all"))
+        )
+        input_canvas.create_window((0, 0), window=self.input_frame, anchor="nw", width=340)
+        input_canvas.configure(yscrollcommand=input_scroll.set)
+        input_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        input_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._build_inputs(self.input_frame)
+
+        # 우측 결과 패널
+        right = ttk.Frame(main)
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        nb = ttk.Notebook(right)
+        nb.pack(fill=tk.BOTH, expand=True)
+
+        result_tab = ttk.Frame(nb, padding=10)
+        sketch_tab = ttk.Frame(nb, padding=10)
+        gear_tab = ttk.Frame(nb, padding=10)
+        json_tab = ttk.Frame(nb, padding=10)
+
+        nb.add(result_tab, text="계산 결과")
+        nb.add(sketch_tab, text="AI 생성 그림란")
+        nb.add(gear_tab, text="기어 도면")
+        nb.add(json_tab, text="테스트베드 JSON")
+
+        self.result_text = tk.Text(result_tab, wrap="word", font=("맑은 고딕", 10), height=20)
+        self.result_text.pack(fill=tk.BOTH, expand=True)
+        self.result_text.insert("1.0", "왼쪽에서 조건을 입력하고 상단의 [설계 데이터 및 스케치 생성하기] 버튼을 누르세요.\n")
+        self.result_text.configure(state="disabled")
+
+        self.sketch_canvas = tk.Canvas(sketch_tab, bg="#fffaf0", height=520, highlightthickness=1, highlightbackground="#bbb")
+        self.sketch_canvas.pack(fill=tk.BOTH, expand=True)
+
+        self.gear_canvas = tk.Canvas(gear_tab, bg="#ffffff", height=520, highlightthickness=1, highlightbackground="#bbb")
+        self.gear_canvas.pack(fill=tk.BOTH, expand=True)
+
+        self.json_text = tk.Text(json_tab, wrap="none", font=("Consolas", 10))
+        self.json_text.pack(fill=tk.BOTH, expand=True)
+        self.json_text.insert("1.0", "아직 생성된 테스트베드용 JSON 데이터가 없습니다.\n")
+        self.json_text.configure(state="disabled")
+
+        # 하단 고정 버튼도 추가: 화면 크기가 작아도 사용자가 쉽게 발견 가능
+        footer = ttk.Frame(self, padding=(14, 8))
+        footer.pack(side=tk.BOTTOM, fill=tk.X)
+        ttk.Button(
+            footer,
+            text="⚙ 설계 데이터 및 스케치 생성하기",
+            style="Primary.TButton",
+            command=self.generate_design
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            footer,
+            text="📋 테스트베드용 설계 데이터 복사",
+            style="Secondary.TButton",
+            command=self.copy_testbed_json
+        ).pack(side=tk.LEFT, padx=8)
+        ttk.Label(
+            footer,
+            text="※ 실행 버튼은 상단과 하단에 모두 배치되어 있습니다.",
+            foreground="#666"
+        ).pack(side=tk.LEFT, padx=10)
+
+    def _build_inputs(self, parent):
+        ttk.Label(parent, text="1. 빠른 프리셋", style="Section.TLabel").pack(anchor="w", pady=(0, 5))
+        self.preset_var = tk.StringVar(value="FRC/대회용 로봇")
+        preset = ttk.Combobox(parent, textvariable=self.preset_var, values=list(PRESETS.keys()), state="readonly")
+        preset.pack(fill=tk.X, pady=(0, 8))
+        preset.bind("<<ComboboxSelected>>", lambda e: self.apply_preset(self.preset_var.get()))
+
+        ttk.Separator(parent).pack(fill=tk.X, pady=8)
+        ttk.Label(parent, text="2. 기본 입력", style="Section.TLabel").pack(anchor="w", pady=(0, 5))
+
+        self.scale_var = tk.StringVar()
+        self.purpose_var = tk.StringVar()
+        self.mass_var = tk.StringVar()
+        self.speed_var = tk.StringVar()
+        self.speed_unit_var = tk.StringVar(value="m/s")
+        self.wheels_var = tk.StringVar()
+        self.wheel_diameter_var = tk.StringVar()
+        self.grade_var = tk.StringVar()
+        self.environment_var = tk.StringVar(value="실내/경기장")
+        self.extra_var = tk.StringVar()
+
+        self._input_row(parent, "제작 스케일", self.scale_var)
+        self._input_row(parent, "목표 모빌리티 용도", self.purpose_var)
+        self._input_row(parent, "예상 총 질량 kg", self.mass_var)
+
+        speed_frame = ttk.Frame(parent)
+        speed_frame.pack(fill=tk.X, pady=4)
+        ttk.Label(speed_frame, text="목표 주행 속도", width=15).pack(side=tk.LEFT)
+        ttk.Entry(speed_frame, textvariable=self.speed_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Combobox(speed_frame, textvariable=self.speed_unit_var, values=["m/s", "km/h"], state="readonly", width=7).pack(side=tk.LEFT, padx=(6, 0))
+
+        self._input_row(parent, "구동 바퀴 수", self.wheels_var)
+        self._input_row(parent, "바퀴 지름 m", self.wheel_diameter_var)
+        self._input_row(parent, "목표 경사각 deg", self.grade_var)
+
+        env_frame = ttk.Frame(parent)
+        env_frame.pack(fill=tk.X, pady=4)
+        ttk.Label(env_frame, text="운행 환경", width=15).pack(side=tk.LEFT)
+        ttk.Combobox(env_frame, textvariable=self.environment_var, values=list(ENV_PARAMS.keys()), state="readonly").pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ttk.Label(parent, text="기타 요구사항").pack(anchor="w", pady=(8, 2))
+        ttk.Entry(parent, textvariable=self.extra_var).pack(fill=tk.X)
+
+        ttk.Separator(parent).pack(fill=tk.X, pady=12)
+        ttk.Label(parent, text="3. 선택 조정값", style="Section.TLabel").pack(anchor="w", pady=(0, 5))
+
+        self.motor_rpm_var = tk.StringVar(value="3000")
+        self.safety_factor_var = tk.StringVar(value="1.5")
+        self.voltage_var = tk.StringVar(value="24")
+        self.battery_ah_var = tk.StringVar(value="20")
+        self.accel_time_var = tk.StringVar(value="3.0")
+
+        self._input_row(parent, "기준 모터 RPM", self.motor_rpm_var)
+        self._input_row(parent, "안전율", self.safety_factor_var)
+        self._input_row(parent, "배터리 전압 V", self.voltage_var)
+        self._input_row(parent, "배터리 용량 Ah", self.battery_ah_var)
+        self._input_row(parent, "목표 가속시간 s", self.accel_time_var)
+
+        ttk.Separator(parent).pack(fill=tk.X, pady=12)
+        ttk.Label(parent, text="버튼 안내", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(
+            parent,
+            text="실행 버튼은 창 상단과 하단에 고정되어 있습니다.\n화면이 작아 왼쪽 패널을 스크롤해도 버튼은 사라지지 않습니다.",
+            foreground="#555",
+            wraplength=320
+        ).pack(anchor="w", pady=(4, 12))
+
+    def _input_row(self, parent, label, variable):
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=4)
+        ttk.Label(row, text=label, width=15).pack(side=tk.LEFT)
+        ttk.Entry(row, textvariable=variable).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    def apply_preset(self, name):
+        data = PRESETS.get(name, {})
+        if not data:
+            return
+        self.scale_var.set(str(data.get("scale", "")))
+        self.purpose_var.set(str(data.get("purpose", "")))
+        self.mass_var.set(str(data.get("mass", "")))
+        self.speed_var.set(str(data.get("speed", "")))
+        self.speed_unit_var.set(str(data.get("speed_unit", "m/s")))
+        self.wheels_var.set(str(data.get("wheels", "")))
+        self.wheel_diameter_var.set(str(data.get("wheel_diameter", "")))
+        self.grade_var.set(str(data.get("grade", "")))
+        self.environment_var.set(str(data.get("environment", "실내/경기장")))
+        self.extra_var.set(str(data.get("extra", "")))
+
+    def _read_float(self, var, name, min_value=None):
+        try:
+            value = float(var.get())
+        except ValueError:
+            raise ValueError(f"'{name}' 항목은 숫자로 입력해야 합니다.")
+        if min_value is not None and value < min_value:
+            raise ValueError(f"'{name}' 항목은 {min_value} 이상이어야 합니다.")
+        return value
+
+    def _read_int(self, var, name, min_value=None):
+        try:
+            value = int(float(var.get()))
+        except ValueError:
+            raise ValueError(f"'{name}' 항목은 정수로 입력해야 합니다.")
+        if min_value is not None and value < min_value:
+            raise ValueError(f"'{name}' 항목은 {min_value} 이상이어야 합니다.")
+        return value
+
+    def generate_design(self):
+        try:
+            scale = self.scale_var.get().strip()
+            purpose = self.purpose_var.get().strip()
+            mass = self._read_float(self.mass_var, "예상 총 질량 kg", 0.1)
+            speed = self._read_float(self.speed_var, "목표 주행 속도", 0.01)
+            speed_unit = self.speed_unit_var.get()
+            target_speed_mps = speed / 3.6 if speed_unit == "km/h" else speed
+            wheels = self._read_int(self.wheels_var, "구동 바퀴 수", 1)
+            wheel_diameter = self._read_float(self.wheel_diameter_var, "바퀴 지름 m", 0.03)
+            wheel_radius = wheel_diameter / 2.0
+            grade_deg = self._read_float(self.grade_var, "목표 경사각 deg", 0)
+            environment = self.environment_var.get()
+            extra = self.extra_var.get().strip()
+            motor_rpm = self._read_float(self.motor_rpm_var, "기준 모터 RPM", 100)
+            safety_factor = self._read_float(self.safety_factor_var, "안전율", 1.0)
+            voltage = self._read_float(self.voltage_var, "배터리 전압 V", 1.0)
+            battery_ah = self._read_float(self.battery_ah_var, "배터리 용량 Ah", 0.1)
+            accel_time = self._read_float(self.accel_time_var, "목표 가속시간 s", 0.1)
+        except ValueError as e:
+            messagebox.showerror("입력 오류", str(e))
+            return
+
+        env = ENV_PARAMS.get(environment, ENV_PARAMS["실내/경기장"])
+        g = 9.81
+        crr = env["crr"]
+        mu = env["mu"]
+        efficiency = env["eff"]
+        grade_rad = math.radians(grade_deg)
+
+        # 단순 물리 계산: 구름저항 + 등판저항 + 목표 가속에 필요한 힘
+        rolling_force = mass * g * crr * math.cos(grade_rad)
+        grade_force = mass * g * math.sin(grade_rad)
+        accel_force = mass * target_speed_mps / accel_time
+        aero_force = 0.5 * 1.225 * 0.8 * 0.7 * target_speed_mps ** 2  # 단순 CdA 가정
+        required_force = (rolling_force + grade_force + accel_force + aero_force) * safety_factor
+        traction_limit = mu * mass * g * math.cos(grade_rad)
+
+        wheel_torque_total = required_force * wheel_radius
+        wheel_torque_each = wheel_torque_total / wheels
+        wheel_rpm = (target_speed_mps / (2 * math.pi * wheel_radius)) * 60
+        ideal_gear_ratio = motor_rpm / max(wheel_rpm, 1e-6)
+
+        # 보기 좋은 추천 기어비 후보
+        standard_ratios = [3, 5, 7, 10, 12, 15, 18, 20, 25, 30, 36, 40, 50, 60, 80, 100]
+        ranked = sorted(standard_ratios, key=lambda r: abs(math.log(r / max(ideal_gear_ratio, 0.1))))
+        gear_candidates = ranked[:5]
+        recommended_ratio = gear_candidates[0]
+
+        output_wheel_power = required_force * target_speed_mps
+        required_motor_power = output_wheel_power / max(efficiency, 0.1)
+        current_est = required_motor_power / voltage
+        battery_wh = voltage * battery_ah
+        runtime_h = battery_wh / max(required_motor_power, 1)
+        range_km = target_speed_mps * runtime_h * 3.6
+
+        torque_margin = traction_limit / required_force if required_force > 0 else 999
+        slip_warning = "접지력 부족 위험" if torque_margin < 1.0 else "접지력 여유 있음"
+
+        if required_motor_power < 150:
+            motor_class = "소형 BLDC/기어드 DC 모터급"
+            motor_reco = "100~200 W급 BLDC 또는 DC 기어드 모터"
+            controller = "12~24 V 소형 모터 드라이버"
+        elif required_motor_power < 800:
+            motor_class = "중형 BLDC 모터급"
+            motor_reco = "300~800 W급 BLDC 모터"
+            controller = "24~48 V BLDC 드라이버"
+        elif required_motor_power < 3000:
+            motor_class = "고출력 BLDC/PMSM 모터급"
+            motor_reco = "1~3 kW급 BLDC 또는 PMSM 모터"
+            controller = "48~72 V 인버터/모터 컨트롤러"
+        else:
+            motor_class = "차량용 고출력 모터급"
+            motor_reco = "3 kW 이상급 PMSM/BLDC 구동계"
+            controller = "고전압 인버터 및 BMS 연동 제어기"
+
+        if recommended_ratio <= 10:
+            gear_reco = "저감속 헬리컬/타이밍 벨트 감속 구조"
+        elif recommended_ratio <= 30:
+            gear_reco = "중감속 유성기어 또는 스퍼기어 감속기"
+        else:
+            gear_reco = "고감속 유성기어/웜기어 조합 검토"
+
+        if environment in ["농지/비포장", "험지/비포장"]:
+            wheel_reco = "대구경 러그/공압 타이어 또는 고접지 휠"
+            frame_reco = "방수/방진을 고려한 고강성 프레임"
+        elif environment == "실내/평탄면":
+            wheel_reco = "저소음 우레탄/고무 바퀴"
+            frame_reco = "경량 알루미늄 또는 3D 프린팅 프레임"
+        else:
+            wheel_reco = "우레탄/고무 복합 바퀴"
+            frame_reco = "알루미늄 프로파일 또는 판재 프레임"
+
+        budget = self._estimate_budget(required_motor_power, wheels, recommended_ratio)
+
+        design_data = {
+            "version": "python_initial_setting_fixed_v1",
+            "source": "mobility_drive_initial_setting_system",
+            "systemName": APP_TITLE,
+            "input": {
+                "scale": scale,
+                "purpose": purpose,
+                "massKg": mass,
+                "targetSpeedInput": speed,
+                "targetSpeedUnit": speed_unit,
+                "targetSpeedMps": round(target_speed_mps, 4),
+                "driveWheels": wheels,
+                "wheelDiameterM": wheel_diameter,
+                "wheelRadiusM": round(wheel_radius, 4),
+                "gradeDeg": grade_deg,
+                "environment": environment,
+                "extraRequirements": extra,
+                "motorBaseRpm": motor_rpm,
+                "safetyFactor": safety_factor,
+                "batteryVoltageV": voltage,
+                "batteryCapacityAh": battery_ah,
+                "targetAccelerationTimeS": accel_time
+            },
+            "result": {
+                "rollingForceN": round(rolling_force, 3),
+                "gradeForceN": round(grade_force, 3),
+                "accelerationForceN": round(accel_force, 3),
+                "aeroForceN": round(aero_force, 3),
+                "requiredTractiveForceN": round(required_force, 3),
+                "tractionLimitN": round(traction_limit, 3),
+                "tractionMargin": round(torque_margin, 3),
+                "slipWarning": slip_warning,
+                "requiredWheelTorqueTotalNm": round(wheel_torque_total, 3),
+                "requiredWheelTorquePerWheelNm": round(wheel_torque_each, 3),
+                "requiredWheelRpm": round(wheel_rpm, 3),
+                "idealGearRatio": round(ideal_gear_ratio, 3),
+                "recommendedGearRatio": recommended_ratio,
+                "gearCandidates": gear_candidates,
+                "requiredMotorPowerW": round(required_motor_power, 3),
+                "estimatedCurrentA": round(current_est, 3),
+                "estimatedRuntimeH": round(runtime_h, 3),
+                "estimatedRangeKm": round(range_km, 3),
+                "driveEfficiency": efficiency,
+                "rollingResistanceCoefficient": crr,
+                "frictionCoefficient": mu
+            },
+            "recommendation": {
+                "motorClass": motor_class,
+                "motor": motor_reco,
+                "gear": gear_reco,
+                "wheel": wheel_reco,
+                "controller": controller,
+                "frame": frame_reco,
+                "budgetKRW": budget
+            }
+        }
+
+        self.last_design_data = design_data
+        self._render_result(design_data)
+        self._render_json(design_data)
+        self._draw_sketch(design_data)
+        self._draw_gear(design_data)
+
+    def _estimate_budget(self, power_w, wheels, ratio):
+        motor = max(60000, int(power_w * 350))
+        gear = max(40000, int(ratio * 8000))
+        wheel = wheels * 25000
+        controller = max(50000, int(power_w * 180))
+        battery = max(80000, int(power_w * 120))
+        frame = 120000
+        total = motor + gear + wheel + controller + battery + frame
+        return {
+            "motor": motor,
+            "gearbox": gear,
+            "wheels": wheel,
+            "controller": controller,
+            "battery": battery,
+            "frame": frame,
+            "total": total
+        }
+
+    def _render_result(self, data):
+        inp = data["input"]
+        res = data["result"]
+        rec = data["recommendation"]
+        budget = rec["budgetKRW"]
+        text = f"""
+[{APP_TITLE}]
+
+■ 입력 조건
+- 제작 스케일: {inp['scale']}
+- 목표 용도: {inp['purpose']}
+- 예상 질량: {inp['massKg']} kg
+- 목표 속도: {inp['targetSpeedInput']} {inp['targetSpeedUnit']} = {inp['targetSpeedMps']} m/s
+- 구동 바퀴 수: {inp['driveWheels']}개
+- 바퀴 지름: {inp['wheelDiameterM']} m
+- 목표 경사각: {inp['gradeDeg']} deg
+- 운행 환경: {inp['environment']}
+- 기타 요구사항: {inp['extraRequirements']}
+
+■ 계산 결과
+- 요구 견인력: {res['requiredTractiveForceN']} N
+- 접지 한계: {res['tractionLimitN']} N
+- 접지 여유율: {res['tractionMargin']} → {res['slipWarning']}
+- 전체 바퀴 요구 토크: {res['requiredWheelTorqueTotalNm']} N·m
+- 바퀴당 요구 토크: {res['requiredWheelTorquePerWheelNm']} N·m
+- 필요 휠 RPM: {res['requiredWheelRpm']} rpm
+- 이상 감속비: {res['idealGearRatio']}:1
+- 추천 감속비: {res['recommendedGearRatio']}:1
+- 기어비 후보 5개: {', '.join(str(x) + ':1' for x in res['gearCandidates'])}
+- 요구 모터 출력: {res['requiredMotorPowerW']} W
+- 예상 전류: {res['estimatedCurrentA']} A
+- 예상 연속 운용시간: {res['estimatedRuntimeH']} h
+- 예상 주행거리: {res['estimatedRangeKm']} km
+
+■ 추천 사항
+- 모터 체급: {rec['motorClass']}
+- 추천 모터: {rec['motor']}
+- 추천 감속기: {rec['gear']}
+- 추천 바퀴: {rec['wheel']}
+- 추천 제어기: {rec['controller']}
+- 추천 프레임: {rec['frame']}
+
+■ 간이 예산안
+- 모터: {budget['motor']:,} 원
+- 감속기: {budget['gearbox']:,} 원
+- 바퀴: {budget['wheels']:,} 원
+- 제어기: {budget['controller']:,} 원
+- 배터리: {budget['battery']:,} 원
+- 프레임/기구: {budget['frame']:,} 원
+- 합계: {budget['total']:,} 원
+
+■ 테스트베드 연동
+상단 또는 하단의 [📋 테스트베드용 설계 데이터 복사] 버튼을 누르면 위 계산 결과가 JSON 형식으로 클립보드에 복사됩니다.
+별도 테스트베드 프로그램에서 붙여넣으면 이 조건을 기준으로 가상 주행 시뮬레이션을 실행할 수 있습니다.
+""".strip()
+        self.result_text.configure(state="normal")
+        self.result_text.delete("1.0", tk.END)
+        self.result_text.insert("1.0", text)
+        self.result_text.configure(state="disabled")
+
+    def _render_json(self, data):
+        s = json.dumps(data, ensure_ascii=False, indent=2)
+        self.json_text.configure(state="normal")
+        self.json_text.delete("1.0", tk.END)
+        self.json_text.insert("1.0", s)
+        self.json_text.configure(state="disabled")
+
+    def _draw_sketch(self, data):
+        c = self.sketch_canvas
+        c.delete("all")
+        w = max(c.winfo_width(), 900)
+        h = max(c.winfo_height(), 500)
+
+        # 배경 격자
+        for x in range(20, w, 40):
+            c.create_line(x, 0, x, h, fill="#f2e8d0")
+        for y in range(20, h, 40):
+            c.create_line(0, y, w, y, fill="#f2e8d0")
+
+        c.create_text(24, 20, anchor="nw", text="AI 생성 그림란 - 초기 아이디어 스케치", font=("맑은 고딕", 15, "bold"), fill="#333")
+        c.create_text(24, 50, anchor="nw", text="프레임, 바퀴, 모터, 감속기, 배터리, 제어기 배치 개념도", font=("맑은 고딕", 10), fill="#666")
+
+        cx, cy = w * 0.48, h * 0.55
+        body_w, body_h = min(420, w * 0.48), 170
+        left, top = cx - body_w / 2, cy - body_h / 2
+        right, bottom = cx + body_w / 2, cy + body_h / 2
+
+        # 손그림 느낌의 차체 프레임
+        c.create_polygon(
+            left+30, top+10, right-30, top, right, top+45, right-10, bottom-20,
+            right-60, bottom+5, left+55, bottom, left, bottom-35, left+18, top+38,
+            outline="#222", fill="#d7ecff", width=3
+        )
+        c.create_rectangle(left+70, top+35, right-70, bottom-35, outline="#246", fill="#eef8ff", width=2)
+        c.create_line(left+70, top+35, right-70, bottom-35, fill="#789", width=2)
+        c.create_line(right-70, top+35, left+70, bottom-35, fill="#789", width=2)
+
+        # 바퀴 배치
+        wheel_count = int(data["input"]["driveWheels"])
+        wheel_positions = []
+        if wheel_count <= 2:
+            wheel_positions = [(left+80, bottom+18), (right-80, bottom+18)]
+        else:
+            wheel_positions = [(left+70, top+25), (right-70, top+25), (left+70, bottom+20), (right-70, bottom+20)]
+            if wheel_count >= 6:
+                wheel_positions += [(cx, top+18), (cx, bottom+22)]
+        for i, (x, y) in enumerate(wheel_positions[:max(2, min(wheel_count, 6))], start=1):
+            c.create_oval(x-34, y-34, x+34, y+34, fill="#222", outline="#111", width=2)
+            c.create_oval(x-22, y-22, x+22, y+22, fill="#777", outline="#ddd", width=2)
+            c.create_text(x, y, text=f"W{i}", fill="white", font=("맑은 고딕", 8, "bold"))
+
+        # 내부 부품
+        motor_x, motor_y = left + body_w * 0.30, cy
+        gear_x, gear_y = left + body_w * 0.43, cy
+        bat_x, bat_y = left + body_w * 0.62, cy
+        ctrl_x, ctrl_y = left + body_w * 0.75, top + 55
+        sensor_x, sensor_y = right - 25, top - 25
+
+        c.create_rectangle(motor_x-38, motor_y-25, motor_x+38, motor_y+25, fill="#ffcc80", outline="#9a5", width=2)
+        c.create_text(motor_x, motor_y, text="MOTOR", font=("맑은 고딕", 8, "bold"))
+        c.create_oval(gear_x-28, gear_y-28, gear_x+28, gear_y+28, fill="#ffe082", outline="#aa7", width=2)
+        c.create_text(gear_x, gear_y, text="GEAR", font=("맑은 고딕", 8, "bold"))
+        c.create_rectangle(bat_x-45, bat_y-25, bat_x+45, bat_y+25, fill="#c8e6c9", outline="#486", width=2)
+        c.create_text(bat_x, bat_y, text="BATTERY", font=("맑은 고딕", 8, "bold"))
+        c.create_rectangle(ctrl_x-38, ctrl_y-22, ctrl_x+38, ctrl_y+22, fill="#e1bee7", outline="#746", width=2)
+        c.create_text(ctrl_x, ctrl_y, text="CTRL", font=("맑은 고딕", 8, "bold"))
+        c.create_oval(sensor_x-18, sensor_y-18, sensor_x+18, sensor_y+18, fill="#b3e5fc", outline="#358", width=2)
+        c.create_text(sensor_x, sensor_y, text="S", font=("맑은 고딕", 9, "bold"))
+
+        # 콜아웃
+        self._callout(c, motor_x, motor_y-28, 55, 115, f"모터\n{data['recommendation']['motorClass']}")
+        self._callout(c, gear_x, gear_y+30, 55, h-130, f"감속비\n{data['result']['recommendedGearRatio']}:1")
+        self._callout(c, bat_x, bat_y+28, w-300, h-130, f"배터리\n{data['input']['batteryVoltageV']}V {data['input']['batteryCapacityAh']}Ah")
+        self._callout(c, ctrl_x, ctrl_y-25, w-300, 110, "제어기\n속도/전류 제어")
+        self._callout(c, sensor_x, sensor_y-20, w-210, 55, "센서\n위치/장애물 인식")
+
+        # 메모 박스
+        memo = (
+            f"목표: {data['input']['purpose']}\n"
+            f"질량: {data['input']['massKg']} kg / 속도: {data['input']['targetSpeedMps']} m/s\n"
+            f"요구출력: {data['result']['requiredMotorPowerW']} W\n"
+            f"바퀴당 토크: {data['result']['requiredWheelTorquePerWheelNm']} N·m\n"
+            f"주의: {data['result']['slipWarning']}"
+        )
+        c.create_rectangle(24, h-118, 390, h-20, fill="#fff8dc", outline="#c9a646", width=2)
+        c.create_text(38, h-105, anchor="nw", text=memo, font=("맑은 고딕", 10), fill="#333")
+
+    def _callout(self, c, x1, y1, x2, y2, text):
+        c.create_line(x1, y1, x2, y2, fill="#555", width=2, arrow=tk.LAST)
+        c.create_rectangle(x2-6, y2-6, x2+138, y2+48, fill="#ffffff", outline="#888")
+        c.create_text(x2+5, y2+4, anchor="nw", text=text, font=("맑은 고딕", 9), fill="#222")
+
+    def _draw_gear(self, data):
+        c = self.gear_canvas
+        c.delete("all")
+        w = max(c.winfo_width(), 900)
+        h = max(c.winfo_height(), 500)
+        c.create_text(24, 20, anchor="nw", text="추천 기어비 개념 도면", font=("맑은 고딕", 15, "bold"), fill="#333")
+
+        ratio = data["result"]["recommendedGearRatio"]
+        cx1, cy = w * 0.36, h * 0.52
+        cx2 = w * 0.62
+        r1 = 45
+        r2 = min(120, 45 + ratio * 2.0)
+
+        c.create_oval(cx1-r1, cy-r1, cx1+r1, cy+r1, fill="#dbeafe", outline="#1d4ed8", width=3)
+        c.create_oval(cx2-r2, cy-r2, cx2+r2, cy+r2, fill="#fee2e2", outline="#b91c1c", width=3)
+
+        for i in range(16):
+            a = 2 * math.pi * i / 16
+            c.create_line(cx1, cy, cx1 + r1 * math.cos(a), cy + r1 * math.sin(a), fill="#1d4ed8")
+        for i in range(28):
+            a = 2 * math.pi * i / 28
+            c.create_line(cx2, cy, cx2 + r2 * math.cos(a), cy + r2 * math.sin(a), fill="#b91c1c")
+
+        c.create_text(cx1, cy, text="입력\n모터", font=("맑은 고딕", 10, "bold"))
+        c.create_text(cx2, cy, text="출력\n휠", font=("맑은 고딕", 10, "bold"))
+        c.create_line(cx1+r1, cy, cx2-r2, cy, fill="#444", width=2)
+        c.create_text(w/2, 80, text=f"추천 감속비: {ratio}:1", font=("맑은 고딕", 16, "bold"), fill="#111")
+        c.create_text(w/2, 115, text=f"이상 감속비: {data['result']['idealGearRatio']}:1 / 후보: {data['result']['gearCandidates']}", font=("맑은 고딕", 11), fill="#555")
+        c.create_text(w/2, h-80, text="이 도면은 실제 치형 설계도가 아니라 초기 설계 방향 확인용 개념도입니다.", font=("맑은 고딕", 10), fill="#666")
+
+    def copy_testbed_json(self):
+        if self.last_design_data is None:
+            messagebox.showwarning("복사할 데이터 없음", "먼저 [설계 데이터 및 스케치 생성하기] 버튼을 눌러 계산을 생성하세요.")
+            return
+        s = json.dumps(self.last_design_data, ensure_ascii=False, indent=2)
+        self.clipboard_clear()
+        self.clipboard_append(s)
+        self.update()
+        messagebox.showinfo("복사 완료", "테스트베드용 설계 데이터 JSON을 클립보드에 복사했습니다.")
+
+
+if __name__ == "__main__":
+    app = MobilityInitialSettingApp()
+    app.mainloop()
+

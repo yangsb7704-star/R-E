@@ -1,4 +1,10 @@
 import math
+import streamlit as st
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+# 웹 페이지 제목 설정
+st.set_page_config(page_title="모빌리티 구동계 설계 최적화", layout="wide")
 
 PRESETS = {
     1: dict(scale='student', purpose='전동 킥보드형 퍼스널 모빌리티', mass=15, speed=15, unit='kmh', wheels=2, env='indoor', extra='경량 프레임, 접이식 구조'),
@@ -96,9 +102,7 @@ def analyze(data):
 
 def draw_sketch(data, part, best):
     try:
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as patches
-        fig, ax = plt.subplots(figsize=(11, 6.8))
+        fig, ax = plt.subplots(figsize=(10, 5))
         ax.set_xlim(0, 1100); ax.set_ylim(680,0); ax.axis('off'); ax.set_facecolor('white')
         red, blue = '#d42323', '#174a8b'
         lw=3.5
@@ -115,56 +119,80 @@ def draw_sketch(data, part, best):
             wheel(250,525,55); wheel(780,525,55)
             if data['wheels']>=6: wheel(515,535,45)
         ax.add_patch(patches.Rectangle((200,450),90,40,fill=False,edgecolor=blue,lw=3)); ax.add_patch(patches.Circle((315,470),24,fill=False,edgecolor=blue,lw=3))
-        ax.annotate('주행 모터 + 감속기', xy=(235,475), xytext=(55,620), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=14, fontweight='bold')
-        ax.add_patch(patches.Rectangle((430,430),145,46,fill=False,edgecolor=blue,lw=3)); ax.annotate('배터리/제어기', xy=(500,475), xytext=(440,665), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=14, fontweight='bold')
+        ax.annotate('주행 모터 + 감속기', xy=(235,475), xytext=(55,620), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=11, fontweight='bold')
+        ax.add_patch(patches.Rectangle((430,430),145,46,fill=False,edgecolor=blue,lw=3)); ax.annotate('배터리/제어기', xy=(500,475), xytext=(440,665), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=11, fontweight='bold')
         e=data['extra'].lower()
         if 'intake' in e or '인테이크' in data['extra']:
-            ax.add_patch(patches.Rectangle((795,425),110,65,fill=False,edgecolor=red,lw=3)); ax.annotate('intake 흡입부', xy=(850,462), xytext=(910,590), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=14, fontweight='bold')
+            ax.add_patch(patches.Rectangle((795,425),110,65,fill=False,edgecolor=red,lw=3)); ax.annotate('intake 흡입부', xy=(850,462), xytext=(850,590), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=11, fontweight='bold')
         if 'feeder' in e or '피더' in data['extra']:
-            ax.add_patch(patches.Rectangle((330,300),120,60,fill=False,edgecolor=red,lw=3)); ax.annotate('feeder 이송부', xy=(335,325), xytext=(40,305), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=14, fontweight='bold')
+            ax.add_patch(patches.Rectangle((330,300),120,60,fill=False,edgecolor=red,lw=3)); ax.annotate('feeder 이송부', xy=(335,325), xytext=(40,305), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=11, fontweight='bold')
         if 'shooter' in e or '슈터' in data['extra']:
-            ax.add_patch(patches.Rectangle((540,145),155,90,fill=False,edgecolor=red,lw=3)); ax.annotate('shooter 발사 모터', xy=(645,175), xytext=(775,105), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=14, fontweight='bold')
+            ax.add_patch(patches.Rectangle((540,145),155,90,fill=False,edgecolor=red,lw=3)); ax.annotate('shooter 발사 모터', xy=(645,175), xytext=(750,105), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=11, fontweight='bold')
         if 'waterwheel' in e or '워터휠' in data['extra']:
-            ax.add_patch(patches.Circle((610,335),38,fill=False,edgecolor=red,lw=3)); ax.annotate('waterwheel 색인', xy=(650,335), xytext=(835,325), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=14, fontweight='bold')
-        ax.text(40,55,'초기 아이디어 스케치',fontsize=18,fontweight='bold')
-        ax.text(40,85,data['purpose'][:36],fontsize=13)
-        plt.tight_layout(); plt.show()
+            ax.add_patch(patches.Circle((610,335),38,fill=False,edgecolor=red,lw=3)); ax.annotate('waterwheel 색인', xy=(650,335), xytext=(780,325), arrowprops=dict(arrowstyle='->',color=blue,lw=2.2), color=blue, fontsize=11, fontweight='bold')
+        ax.text(40,55,'초기 아이디어 스케치',fontsize=16,fontweight='bold')
+        ax.text(40,85,data['purpose'][:36],fontsize=12)
+        plt.tight_layout()
+        st.pyplot(fig)
     except Exception as e:
-        print('스케치 표시를 건너뜁니다:', e)
+        st.warning(f'스케치 표시 중 오류 발생: {e}')
 
-def main():
-    print('='*80)
-    print('모빌리티 구동계 설계 최적화 및 성능 예측 시스템 v27')
-    print('='*80)
-    print('0. 직접 입력')
-    for k,v in PRESETS.items(): print(f"{k}. {v['purpose']} ({v['mass']}kg)")
-    sel = input('선택: ').strip()
-    if sel.isdigit() and int(sel) in PRESETS:
-        data = PRESETS[int(sel)].copy()
-    else:
-        data = dict(
-            scale=input('스케일(student/research/industry) [student]: ').strip() or 'student',
-            purpose=input('용도 [학생용 이동 로봇]: ').strip() or '학생용 이동 로봇',
-            mass=float(input('질량 kg [35]: ').strip() or 35),
-            speed=float(input('속도 [1.5]: ').strip() or 1.5),
-            unit=input('단위(mps/kmh) [mps]: ').strip() or 'mps',
-            wheels=int(input('구동 바퀴 수 [4]: ').strip() or 4),
-            env=input('환경(normal/indoor/obstacle/extreme) [indoor]: ').strip() or 'indoor',
-            extra=input('기타 요구사항: ').strip() or '없음')
-    part, rows, calc = analyze(data)
-    print('\n[물리 모델]')
-    print(f"요구 동력: {calc['req_power']:.0f} W / 바퀴당 요구 토크: {calc['req_tq']:.2f} Nm / 필요 휠 RPM: {calc['req_rpm']:.1f}")
-    print(f"추천 모터: {part['motor']} / 기준 토크 {calc['motor_nm']:.2f} Nm")
-    print('\n[기어비 후보]')
-    for i,r in enumerate(rows,1):
-        print(f"{i}위 {stars(r['stars'])} | {r['ratio']}:1 | 20T:{r['driven']}T | RPM {r['rpm']:.1f} | 토크 {r['tq']:.2f}Nm | {r['typ']} - {r['reason']}")
-    budget=[('주행 구동부', part['motor'], part['motor_cost'], data['wheels']), ('주행 구동부', part['gear'], part['gear_cost'], data['wheels']), ('바퀴/축/베어링', part['wheel'], part['wheel_cost'], data['wheels']), ('제어/전원부', part['control'], part['control_cost'], 1), ('주요 구성 형체', part['frame'], part['frame_cost'], 1)] + aux_items(data['extra'])
-    total=sum(x[2]*x[3] for x in budget)
-    print('\n[예산안]')
-    for cat,name,unit,qty,*role in budget:
-        print(f"- {cat}: {name} / {unit:,}원 x {qty} = {unit*qty:,}원")
-    print(f"총 예상 제작 비용: 약 {total:,}원")
-    if rows: draw_sketch(data, part, rows[0])
+# Streamlit 웹 화면 구성
+st.title("⚙️ 모빌리티 구동계 설계 최적화 및 성능 예측 시스템 v27")
 
-if __name__ == '__main__': main()
+option_list = ["직접 입력"] + [f"{k}. {v['purpose']} ({v['mass']}kg)" for k, v in PRESETS.items()]
+selected_option = st.sidebar.selectbox("프리셋 선택", option_list)
 
+if selected_option != "직접 입력":
+    preset_key = int(selected_option.split(".")[0])
+    data = PRESETS[preset_key].copy()
+else:
+    data = dict(
+        scale=st.sidebar.selectbox('스케일', ['student', 'research', 'industry']),
+        purpose=st.sidebar.text_input('용도', '학생용 이동 로봇'),
+        mass=st.sidebar.number_input('질량 (kg)', value=35.0),
+        speed=st.sidebar.number_input('속도', value=1.5),
+        unit=st.sidebar.selectbox('단위', ['mps', 'kmh']),
+        wheels=st.sidebar.number_input('구동 바퀴 수', value=4),
+        env=st.sidebar.selectbox('환경', ['indoor', 'normal', 'obstacle', 'extreme']),
+        extra=st.sidebar.text_input('기타 요구사항', '없음')
+    )
+
+part, rows, calc = analyze(data)
+
+st.subheader("1. 물리 모델 분석 결과")
+col1, col2, col3 = st.columns(3)
+col1.metric("요구 동력", f"{calc['req_power']:.0f} W")
+col2.metric("바퀴당 요구 토크", f"{calc['req_tq']:.2f} Nm")
+col3.metric("필요 휠 RPM", f"{calc['req_rpm']:.1f} RPM")
+st.info(f"**추천 모터:** {part['motor']} (기준 토크 {calc['motor_nm']:.2f} Nm)")
+
+st.subheader("2. 기어비 후보 분석")
+st.table([
+    {
+        "순위": f"{i}위 ({stars(r['stars'])})",
+        "기어비": f"{r['ratio']}:1",
+        "치수": f"20T:{r['driven']}T",
+        "RPM": f"{r['rpm']:.1f}",
+        "토크": f"{r['tq']:.2f} Nm",
+        "유형": r['typ'],
+        "특징": r['reason']
+    } for i, r in enumerate(rows, 1)
+])
+
+st.subheader("3. 예산안")
+budget = [
+    ('주행 구동부', part['motor'], part['motor_cost'], data['wheels']),
+    ('주행 구동부', part['gear'], part['gear_cost'], data['wheels']),
+    ('바퀴/축/베어링', part['wheel'], part['wheel_cost'], data['wheels']),
+    ('제어/전원부', part['control'], part['control_cost'], 1),
+    ('주요 구성 형체', part['frame'], part['frame_cost'], 1)
+] + aux_items(data['extra'])
+
+total = sum(x[2]*x[3] for x in budget)
+st.table([{"분류": cat, "품목": name, "단가": f"{unit:,}원", "수량": qty, "합계": f"{unit*qty:,}원"} for cat, name, unit, qty, *role in budget])
+st.success(f"**총 예상 제작 비용: 약 {total:,}원**")
+
+st.subheader("4. 시스템 개념 스케치")
+if rows:
+    draw_sketch(data, part, rows[0])
